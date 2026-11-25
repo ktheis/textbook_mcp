@@ -1,0 +1,1673 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>8B Model &amp; MCP Harness — OpenStax Chemistry 2e</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --panel: #161d26;
+      --panel-alt: #1c2531;
+      --surface-input: #0d1218;
+      --surface-inset: #0b1016;
+      --btn-hover-bg: #243040;
+      --btn-hover-border: #4f647e;
+      --border: #2a3646;
+      --border-strong: #3a4a5e;
+      --text: #e6edf3;
+      --text-secondary: #dbe6f2;
+      --text-muted: #8b9bb0;
+      --accent: #38bdf8;
+      --accent-hover: #0ea5e9;
+      --accent-soft: rgba(56, 189, 248, 0.12);
+      --green: #34d399;
+      --green-soft: rgba(52, 211, 153, 0.14);
+      --amber: #fbbf24;
+      --amber-soft: rgba(251, 191, 36, 0.14);
+      --red: #f87171;
+      --red-soft: rgba(248, 113, 113, 0.14);
+      --red-text: #fecaca;
+      --json-key: #7dd3fc;
+      --json-str: #86efac;
+      --json-num: #fcd34d;
+      --json-bool: #f472b6;
+      --json-null: #94a3b8;
+      --mono: "Cascadia Code", "Fira Code", Consolas, ui-monospace, SFMono-Regular, Menlo, monospace;
+      --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+
+    [data-theme="light"] {
+      --bg: #f1f5f9;
+      --panel: #ffffff;
+      --panel-alt: #f8fafc;
+      --surface-input: #ffffff;
+      --surface-inset: #f1f5f9;
+      --btn-hover-bg: #e2e8f0;
+      --btn-hover-border: #94a3b8;
+      --border: #d8e1eb;
+      --border-strong: #bcc8d6;
+      --text: #0f172a;
+      --text-secondary: #1e293b;
+      --text-muted: #475569;
+      --accent: #0284c7;
+      --accent-hover: #0369a1;
+      --accent-soft: rgba(2, 132, 199, 0.1);
+      --green: #059669;
+      --green-soft: rgba(5, 150, 105, 0.12);
+      --amber: #b45309;
+      --amber-soft: rgba(217, 119, 6, 0.12);
+      --red: #dc2626;
+      --red-soft: rgba(220, 38, 38, 0.1);
+      --red-text: #991b1b;
+      --json-key: #0369a1;
+      --json-str: #15803d;
+      --json-num: #b45309;
+      --json-bool: #be185d;
+      --json-null: #64748b;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 22px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-icon {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #0284c7, #38bdf8);
+      display: grid;
+      place-items: center;
+      font-weight: 800;
+      font-size: 14px;
+      color: #08121c;
+      font-family: var(--mono);
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+
+    .brand .subtitle {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-family: var(--mono);
+      font-weight: 600;
+      border: 1px solid var(--border-strong);
+      background: var(--panel-alt);
+      color: var(--text-muted);
+    }
+
+    .badge.ok { color: var(--green); border-color: rgba(52, 211, 153, 0.4); background: var(--green-soft); }
+    .badge.err { color: var(--red); border-color: rgba(248, 113, 113, 0.4); background: var(--red-soft); }
+    .badge.req { color: var(--amber); border-color: rgba(251, 191, 36, 0.4); background: var(--amber-soft); }
+    .badge.type { color: var(--accent); border-color: rgba(56, 189, 248, 0.35); background: var(--accent-soft); }
+
+    .header-controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .context-meter {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--panel-alt);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 12px;
+      font-size: 12px;
+    }
+
+    .meter-bar-wrap {
+      width: 140px;
+      height: 8px;
+      background: var(--surface-inset);
+      border-radius: 999px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+
+    .meter-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: var(--green);
+      transition: width 0.25s ease, background 0.25s ease;
+    }
+
+    .meter-bar-fill.warn { background: var(--amber); }
+    .meter-bar-fill.danger { background: var(--red); }
+
+    main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: minmax(360px, 460px) minmax(420px, 1fr);
+      gap: 18px;
+      padding: 18px 22px 24px;
+      max-width: 1680px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    @media (max-width: 960px) {
+      main { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .card-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.015);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .card-header h2 {
+      margin: 0;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      font-weight: 700;
+    }
+
+    .card-body {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    label.field-label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+
+    .field-label-left {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .field-group {
+      background: var(--panel-alt);
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      padding: 11px 12px;
+    }
+
+    .field-hint {
+      font-size: 11.5px;
+      color: var(--text-muted);
+      margin-top: 5px;
+      line-height: 1.4;
+    }
+
+    select, input[type="text"], input[type="number"], textarea {
+      width: 100%;
+      background: var(--surface-input);
+      color: var(--text);
+      border: 1px solid var(--border-strong);
+      border-radius: 7px;
+      padding: 8px 10px;
+      font-size: 13.5px;
+      font-family: var(--sans);
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    select:focus, input:focus, textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--accent-soft);
+    }
+
+    select.compact {
+      width: auto;
+      padding: 4px 8px;
+      font-size: 12px;
+      font-family: var(--mono);
+    }
+
+    .tool-desc {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.45;
+      background: var(--accent-soft);
+      border-left: 3px solid var(--accent);
+      padding: 9px 12px;
+      border-radius: 0 7px 7px 0;
+    }
+
+    details.schema-box {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface-input);
+      overflow: hidden;
+    }
+
+    details.schema-box summary {
+      cursor: pointer;
+      padding: 8px 12px;
+      font-size: 12px;
+      font-family: var(--mono);
+      color: var(--text-muted);
+      user-select: none;
+    }
+
+    details.schema-box summary:hover { color: var(--text); }
+
+    pre {
+      margin: 0;
+      font-family: var(--mono);
+      font-size: 12.5px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .code-block {
+      background: var(--surface-inset);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      overflow: auto;
+      max-height: 520px;
+    }
+
+    .array-editor {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .array-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .array-row input { flex: 1; }
+
+    button {
+      cursor: pointer;
+      font-family: var(--sans);
+      font-weight: 600;
+      font-size: 13px;
+      border-radius: 7px;
+      border: 1px solid var(--border-strong);
+      background: var(--panel-alt);
+      color: var(--text);
+      padding: 8px 13px;
+      transition: background 0.15s, border-color 0.15s, transform 0.05s;
+    }
+
+    button:hover { background: var(--btn-hover-bg); border-color: var(--btn-hover-border); }
+    button:active { transform: translateY(1px); }
+
+    button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #ffffff;
+    }
+
+    button.primary:hover {
+      background: var(--accent-hover);
+      border-color: var(--accent-hover);
+    }
+
+    button.primary:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    button.small {
+      padding: 5px 9px;
+      font-size: 12px;
+    }
+
+    button.icon-btn {
+      padding: 6px 10px;
+      font-family: var(--mono);
+      color: var(--red);
+    }
+
+    .form-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-top: 4px;
+    }
+
+    .form-actions .primary { flex: 1; padding: 10px 16px; font-size: 14px; }
+
+    .no-params {
+      font-size: 13px;
+      color: var(--text-muted);
+      font-style: italic;
+      padding: 12px;
+      border: 1px dashed var(--border-strong);
+      border-radius: 8px;
+      text-align: center;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 4px;
+    }
+
+    .tab-btn {
+      padding: 5px 10px;
+      font-size: 12px;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text-muted);
+    }
+
+    .tab-btn.active {
+      background: var(--accent-soft);
+      color: var(--accent);
+      border-color: rgba(56, 189, 248, 0.35);
+    }
+
+    .meta-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .right-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      min-width: 0;
+    }
+
+    .history-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 280px;
+      overflow-y: auto;
+    }
+
+    .history-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 9px 11px;
+      border-radius: 8px;
+      background: var(--panel-alt);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+
+    .history-item:hover { border-color: var(--border-strong); background: var(--btn-hover-bg); }
+    .history-item.selected { border-color: var(--accent); background: var(--accent-soft); }
+
+    .history-main {
+      min-width: 0;
+      flex: 1;
+    }
+
+    .history-title {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .history-args {
+      font-family: var(--mono);
+      font-size: 11.5px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-top: 2px;
+    }
+
+    .history-meta {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .readable-card {
+      background: var(--surface-input);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 14px;
+      margin-bottom: 10px;
+    }
+
+    .readable-card h4 {
+      margin: 0 0 6px;
+      font-size: 13.5px;
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .readable-text {
+      font-size: 13.5px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      color: var(--text-secondary);
+    }
+
+    .answer-box {
+      margin-top: 8px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      font-size: 13px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+    }
+
+    .answer-box.verified {
+      border-color: rgba(52, 211, 153, 0.35);
+      background: var(--green-soft);
+    }
+
+    .answer-box.unavailable {
+      border-color: rgba(251, 191, 36, 0.35);
+      background: var(--amber-soft);
+      color: var(--amber);
+    }
+
+    /* JSON syntax highlighting */
+    .json-key { color: var(--json-key); }
+    .json-str { color: var(--json-str); }
+    .json-num { color: var(--json-num); }
+    .json-bool { color: var(--json-bool); }
+    .json-null { color: var(--json-null); font-style: italic; }
+
+    .empty-state {
+      color: var(--text-muted);
+      font-size: 13.5px;
+      text-align: center;
+      padding: 36px 16px;
+    }
+
+    .error-banner {
+      background: var(--red-soft);
+      border: 1px solid rgba(248, 113, 113, 0.45);
+      color: var(--red-text);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 13px;
+    }
+
+    .figure-link {
+      color: var(--accent);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      cursor: pointer;
+      font-weight: 600;
+      background: none;
+      border: none;
+      padding: 0;
+      font-size: inherit;
+      font-family: inherit;
+      text-align: left;
+    }
+
+    .figure-link:hover {
+      color: var(--accent-hover);
+      background: none;
+      border: none;
+    }
+
+    .figure-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .figure-row {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      padding: 8px 10px;
+      border-radius: 7px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+    }
+
+    .figure-row-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(5, 9, 14, 0.78);
+      backdrop-filter: blur(3px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      z-index: 1000;
+    }
+
+    .modal-backdrop.open {
+      display: flex;
+    }
+
+    .modal-dialog {
+      background: var(--panel);
+      border: 1px solid var(--border-strong);
+      border-radius: 12px;
+      max-width: 920px;
+      width: 100%;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+    }
+
+    .modal-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .modal-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .modal-body {
+      padding: 16px;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .modal-body img {
+      max-width: 100%;
+      max-height: 66vh;
+      border-radius: 8px;
+      background: #ffffff;
+      padding: 6px;
+      object-fit: contain;
+    }
+
+    .modal-caption {
+      width: 100%;
+      font-size: 13px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      color: var(--text-secondary);
+      background: var(--surface-input);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="brand-icon">8B</div>
+      <div>
+        <h1>8B Model &amp; MCP Harness</h1>
+        <div class="subtitle">Schema-driven tool caller for <span id="server-name" style="font-family: var(--mono); color: var(--accent);">chemistry-2e</span></div>
+      </div>
+    </div>
+
+    <div class="header-controls">
+      <div class="context-meter" title="Estimated cumulative tokens injected into the 8B model context window">
+        <span style="color: var(--text-muted);">8B Context:</span>
+        <div class="meter-bar-wrap">
+          <div id="context-bar" class="meter-bar-fill"></div>
+        </div>
+        <span id="context-text" style="font-family: var(--mono);">0 / 8,192 tok</span>
+        <select id="context-limit" class="compact" aria-label="Context window size">
+          <option value="4096">4K</option>
+          <option value="8192" selected>8K</option>
+          <option value="16384">16K</option>
+          <option value="32768">32K</option>
+        </select>
+        <button id="clear-context-btn" class="small" type="button">Reset</button>
+      </div>
+      <button id="theme-toggle-btn" class="small" type="button" aria-label="Toggle day and night mode" title="Switch between Day mode and Night mode">☀ Day</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- LEFT: 8B MODEL TOOL CALL COMPOSER -->
+    <section class="card">
+      <div class="card-header">
+        <h2>1. 8B Model — Tool Call Composer</h2>
+        <span id="tool-count-badge" class="badge">Loading…</span>
+      </div>
+      <div class="card-body">
+        <div>
+          <label class="field-label" for="tool-select">
+            <span class="field-label-left">Select MCP Tool</span>
+          </label>
+          <select id="tool-select"></select>
+        </div>
+
+        <div id="tool-desc" class="tool-desc">Loading tools from MCP server…</div>
+
+        <details class="schema-box">
+          <summary>View Tool JSON Schema (inputSchema)</summary>
+          <div style="padding: 10px 12px; border-top: 1px solid var(--border); max-height: 240px; overflow: auto;">
+            <pre id="schema-preview"></pre>
+          </div>
+        </details>
+
+        <form id="tool-form" novalidate>
+          <div id="form-fields" style="display: flex; flex-direction: column; gap: 11px;"></div>
+
+          <div style="margin-top: 14px;">
+            <div class="field-label" style="margin-bottom: 6px;">
+              <span class="field-label-left" style="font-size: 12px; color: var(--text-muted);">Simulated 8B Model Tool-Call Payload</span>
+              <button id="copy-payload-btn" type="button" class="small">Copy JSON</button>
+            </div>
+            <div class="code-block" style="max-height: 150px;">
+              <pre id="payload-preview"></pre>
+            </div>
+          </div>
+
+          <div id="form-error" class="error-banner" style="display: none; margin-top: 10px;"></div>
+
+          <div class="form-actions" style="margin-top: 14px;">
+            <button id="submit-btn" type="submit" class="primary">Submit Tool Call</button>
+            <button id="reset-form-btn" type="button">Reset Defaults</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- RIGHT: HARNESS EXECUTION & RESPONSE INSPECTOR -->
+    <div class="right-stack">
+      <section class="card" style="flex: 1;">
+        <div class="card-header">
+          <h2>2. Harness — Tool Response</h2>
+          <div class="tabs">
+            <button type="button" class="tab-btn active" data-tab="readable">Readable</button>
+            <button type="button" class="tab-btn" data-tab="json">Pretty JSON</button>
+            <button type="button" class="tab-btn" data-tab="mcp">MCP Envelope</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div id="response-meta" class="meta-strip" style="display: none;"></div>
+          <div id="response-view">
+            <div class="empty-state">
+              Select a tool on the left, fill in its JSON Schema parameters, and click <strong>Submit Tool Call</strong> to execute it through the MCP harness.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <h2>3. Harness Audit Log (Session History)</h2>
+          <span id="history-count" class="badge">0 calls</span>
+        </div>
+        <div class="card-body">
+          <div id="history-list" class="history-list">
+            <div class="empty-state" style="padding: 18px;">No tool calls yet.</div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- FIGURE POPUP MODAL -->
+  <div id="figure-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="figure-modal-title">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div>
+          <div id="figure-modal-title" class="modal-title">Figure</div>
+          <div id="figure-modal-path" style="font-size: 11.5px; font-family: var(--mono); color: var(--text-muted); margin-top: 2px;"></div>
+        </div>
+        <button id="figure-modal-close" type="button" class="small">Close (Esc)</button>
+      </div>
+      <div class="modal-body">
+        <img id="figure-modal-img" src="" alt="Textbook figure" />
+        <div id="figure-modal-caption" class="modal-caption"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const state = {
+      tools: [],
+      selectedTool: null,
+      activeTab: "readable",
+      history: [],
+      selectedHistoryIndex: -1,
+      cumulativeTokens: 0,
+    };
+
+    const els = {
+      serverName: document.getElementById("server-name"),
+      toolSelect: document.getElementById("tool-select"),
+      toolCountBadge: document.getElementById("tool-count-badge"),
+      toolDesc: document.getElementById("tool-desc"),
+      schemaPreview: document.getElementById("schema-preview"),
+      form: document.getElementById("tool-form"),
+      formFields: document.getElementById("form-fields"),
+      payloadPreview: document.getElementById("payload-preview"),
+      formError: document.getElementById("form-error"),
+      submitBtn: document.getElementById("submit-btn"),
+      resetFormBtn: document.getElementById("reset-form-btn"),
+      copyPayloadBtn: document.getElementById("copy-payload-btn"),
+      responseMeta: document.getElementById("response-meta"),
+      responseView: document.getElementById("response-view"),
+      historyList: document.getElementById("history-list"),
+      historyCount: document.getElementById("history-count"),
+      contextBar: document.getElementById("context-bar"),
+      contextText: document.getElementById("context-text"),
+      contextLimit: document.getElementById("context-limit"),
+      clearContextBtn: document.getElementById("clear-context-btn"),
+      themeToggleBtn: document.getElementById("theme-toggle-btn"),
+      figureModal: document.getElementById("figure-modal"),
+      figureModalTitle: document.getElementById("figure-modal-title"),
+      figureModalPath: document.getElementById("figure-modal-path"),
+      figureModalImg: document.getElementById("figure-modal-img"),
+      figureModalCaption: document.getElementById("figure-modal-caption"),
+      figureModalClose: document.getElementById("figure-modal-close"),
+    };
+
+    const THEME_STORAGE_KEY = "textbook_mcp_harness_theme";
+
+    function applyTheme(theme) {
+      const isLight = theme === "light";
+      document.documentElement.setAttribute("data-theme", isLight ? "light" : "dark");
+      els.themeToggleBtn.textContent = isLight ? "🌙 Night" : "☀ Day";
+      els.themeToggleBtn.setAttribute("aria-pressed", String(isLight));
+      try {
+        localStorage.setItem(THEME_STORAGE_KEY, isLight ? "light" : "dark");
+      } catch {
+        // Ignore storage restrictions
+      }
+    }
+
+    (function initTheme() {
+      let saved = "dark";
+      try {
+        saved = localStorage.getItem(THEME_STORAGE_KEY) || "dark";
+      } catch {
+        saved = "dark";
+      }
+      applyTheme(saved);
+    })();
+
+    els.themeToggleBtn.addEventListener("click", () => {
+      const current = document.documentElement.getAttribute("data-theme") || "dark";
+      applyTheme(current === "light" ? "dark" : "light");
+    });
+
+    function mediaUrl(mediaPath) {
+      if (!mediaPath) return "";
+      const clean = String(mediaPath).replace(/^\/+/, "");
+      const filename = clean.startsWith("media/") ? clean.slice("media/".length) : clean;
+      return `/media/${encodeURIComponent(filename)}`;
+    }
+
+    function openFigureModal(mediaPath, citation = "Figure", caption = "", altText = "") {
+      const url = mediaUrl(mediaPath);
+      if (!url) return;
+      els.figureModalTitle.textContent = citation || "Figure";
+      els.figureModalPath.textContent = mediaPath;
+      els.figureModalImg.src = url;
+      els.figureModalImg.alt = altText || citation || "Textbook figure";
+      const parts = [];
+      if (caption) parts.push(caption);
+      if (altText && altText !== caption) parts.push(`Alt text (for text-only 8B model): ${altText}`);
+      if (parts.length > 0) {
+        els.figureModalCaption.style.display = "block";
+        els.figureModalCaption.textContent = parts.join("\n\n");
+      } else {
+        els.figureModalCaption.style.display = "none";
+      }
+      els.figureModal.classList.add("open");
+    }
+
+    function closeFigureModal() {
+      els.figureModal.classList.remove("open");
+      els.figureModalImg.src = "";
+    }
+
+    els.figureModalClose.addEventListener("click", closeFigureModal);
+    els.figureModal.addEventListener("click", (e) => {
+      if (e.target === els.figureModal) closeFigureModal();
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && els.figureModal.classList.contains("open")) {
+        closeFigureModal();
+      }
+    });
+    els.responseView.addEventListener("click", (e) => {
+      const btn = e.target.closest(".figure-link");
+      if (!btn) return;
+      openFigureModal(btn.dataset.mediaPath, btn.dataset.citation, btn.dataset.caption, btn.dataset.altText || "");
+    });
+
+    // --- JSON Schema introspection helpers ---
+    function resolvePropSchema(propSchema) {
+      if (!propSchema || typeof propSchema !== "object") {
+        return { baseType: "string", nullable: false, items: null, enumValues: null };
+      }
+
+      if (Array.isArray(propSchema.anyOf)) {
+        const nullable = propSchema.anyOf.some((s) => s.type === "null");
+        const nonNull = propSchema.anyOf.find((s) => s.type !== "null") || {};
+        return {
+          baseType: nonNull.type || "string",
+          nullable,
+          items: nonNull.items || null,
+          enumValues: nonNull.enum || propSchema.enum || null,
+        };
+      }
+
+      if (Array.isArray(propSchema.type)) {
+        const nullable = propSchema.type.includes("null");
+        const baseType = propSchema.type.find((t) => t !== "null") || "string";
+        return {
+          baseType,
+          nullable,
+          items: propSchema.items || null,
+          enumValues: propSchema.enum || null,
+        };
+      }
+
+      return {
+        baseType: propSchema.type || "string",
+        nullable: false,
+        items: propSchema.items || null,
+        enumValues: propSchema.enum || null,
+      };
+    }
+
+    function typeBadgeText(resolved) {
+      let label = resolved.baseType;
+      if (resolved.baseType === "array" && resolved.items?.type) {
+        label = `array<${resolved.items.type}>`;
+      }
+      return resolved.nullable ? `${label} | null` : label;
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function highlightJson(obj) {
+      const json = typeof obj === "string" ? obj : JSON.stringify(obj, null, 2);
+      const escaped = escapeHtml(json);
+      return escaped.replace(
+        /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+        (match) => {
+          let cls = "json-num";
+          if (/^"/.test(match)) {
+            if (/:$/.test(match)) {
+              cls = "json-key";
+            } else {
+              const rawVal = match.slice(1, -1);
+              if (/^media\/[^"\\]+$/i.test(rawVal)) {
+                return `<button type="button" class="figure-link" data-media-path="${rawVal}" data-citation="${rawVal}" data-caption="">${match}</button>`;
+              }
+              cls = "json-str";
+            }
+          } else if (/true|false/.test(match)) {
+            cls = "json-bool";
+          } else if (/null/.test(match)) {
+            cls = "json-null";
+          }
+          return `<span class="${cls}">${match}</span>`;
+        }
+      );
+    }
+
+    // --- Context meter ---
+    function updateContextMeter() {
+      const limit = Number(els.contextLimit.value) || 8192;
+      const pct = Math.min(100, (state.cumulativeTokens / limit) * 100);
+      els.contextBar.style.width = `${pct.toFixed(1)}%`;
+      els.contextBar.classList.remove("warn", "danger");
+      if (pct >= 85) els.contextBar.classList.add("danger");
+      else if (pct >= 60) els.contextBar.classList.add("warn");
+      els.contextText.textContent = `${state.cumulativeTokens.toLocaleString()} / ${limit.toLocaleString()} tok`;
+    }
+
+    // --- Dynamic Schema Form Builder ---
+    function renderToolForm(tool, presetArgs = null) {
+      state.selectedTool = tool;
+      els.toolDesc.textContent = tool.description || "No description provided.";
+      els.schemaPreview.innerHTML = highlightJson(tool.inputSchema);
+      els.formError.style.display = "none";
+      els.formFields.innerHTML = "";
+
+      const schema = tool.inputSchema || { type: "object", properties: {} };
+      const props = schema.properties || {};
+      const requiredSet = new Set(schema.required || []);
+      const propEntries = Object.entries(props);
+
+      if (propEntries.length === 0) {
+        els.formFields.innerHTML = `<div class="no-params">This tool takes no parameters (<code>{}</code>).</div>`;
+        updatePayloadPreview();
+        return;
+      }
+
+      for (const [key, propSchema] of propEntries) {
+        const resolved = resolvePropSchema(propSchema);
+        const isRequired = requiredSet.has(key);
+        const hasDefault = Object.prototype.hasOwnProperty.call(propSchema, "default");
+        const initialVal =
+          presetArgs && Object.prototype.hasOwnProperty.call(presetArgs, key)
+            ? presetArgs[key]
+            : hasDefault
+              ? propSchema.default
+              : undefined;
+
+        const group = document.createElement("div");
+        group.className = "field-group";
+        group.dataset.fieldName = key;
+        group.dataset.baseType = resolved.baseType;
+        group.dataset.nullable = String(resolved.nullable);
+        group.dataset.required = String(isRequired);
+
+        const label = document.createElement("label");
+        label.className = "field-label";
+        label.htmlFor = `field-${key}`;
+        label.innerHTML = `
+          <span class="field-label-left">
+            <span style="font-family: var(--mono);">${escapeHtml(key)}</span>
+            ${isRequired ? '<span class="badge req">required</span>' : '<span class="badge">optional</span>'}
+          </span>
+          <span class="badge type">${escapeHtml(typeBadgeText(resolved))}</span>
+        `;
+        group.appendChild(label);
+
+        if (resolved.enumValues) {
+          const sel = document.createElement("select");
+          sel.id = `field-${key}`;
+          if (resolved.nullable || (!isRequired && !hasDefault)) {
+            const optNull = document.createElement("option");
+            optNull.value = "__NULL__";
+            optNull.textContent = "null (unset)";
+            sel.appendChild(optNull);
+          }
+          for (const val of resolved.enumValues) {
+            const opt = document.createElement("option");
+            opt.value = String(val);
+            opt.textContent = String(val);
+            sel.appendChild(opt);
+          }
+          if (initialVal !== undefined && initialVal !== null) {
+            sel.value = String(initialVal);
+          }
+          sel.addEventListener("change", updatePayloadPreview);
+          group.appendChild(sel);
+        } else if (resolved.baseType === "boolean") {
+          if (resolved.nullable) {
+            const sel = document.createElement("select");
+            sel.id = `field-${key}`;
+            sel.innerHTML = `
+              <option value="__NULL__">null (unset)</option>
+              <option value="true">true</option>
+              <option value="false">false</option>
+            `;
+            if (initialVal === true) sel.value = "true";
+            else if (initialVal === false) sel.value = "false";
+            else sel.value = "__NULL__";
+            sel.addEventListener("change", updatePayloadPreview);
+            group.appendChild(sel);
+          } else {
+            const cbWrap = document.createElement("label");
+            cbWrap.style.display = "flex";
+            cbWrap.style.alignItems = "center";
+            cbWrap.style.gap = "8px";
+            cbWrap.style.fontSize = "13px";
+            const cb = document.createElement("input");
+            cb.type = "checkbox";
+            cb.id = `field-${key}`;
+            cb.checked = Boolean(initialVal);
+            cb.addEventListener("change", updatePayloadPreview);
+            cbWrap.appendChild(cb);
+            cbWrap.appendChild(document.createTextNode("Enabled (true / false)"));
+            group.appendChild(cbWrap);
+          }
+        } else if (resolved.baseType === "integer" || resolved.baseType === "number") {
+          const inp = document.createElement("input");
+          inp.type = "number";
+          inp.id = `field-${key}`;
+          inp.step = resolved.baseType === "integer" ? "1" : "any";
+          inp.placeholder = resolved.nullable
+            ? "null (leave blank to omit)"
+            : !isRequired && hasDefault
+              ? `Optional (default: ${propSchema.default})`
+              : `Enter ${resolved.baseType}`;
+          if (initialVal !== undefined && initialVal !== null) {
+            inp.value = String(initialVal);
+          }
+          inp.addEventListener("input", updatePayloadPreview);
+          group.appendChild(inp);
+        } else if (resolved.baseType === "array") {
+          const editor = document.createElement("div");
+          editor.className = "array-editor";
+          editor.dataset.itemType = resolved.items?.type || "string";
+
+          const rowsWrap = document.createElement("div");
+          rowsWrap.className = "array-editor";
+          editor.appendChild(rowsWrap);
+
+          function addArrayRow(val = "") {
+            const row = document.createElement("div");
+            row.className = "array-row";
+            const inp = document.createElement("input");
+            inp.type = resolved.items?.type === "integer" || resolved.items?.type === "number" ? "number" : "text";
+            inp.value = val;
+            inp.placeholder = key === "exercise_ids" ? "e.g. Exercise 1.1 or 1.1" : `Enter ${resolved.items?.type || "item"}`;
+            inp.addEventListener("input", updatePayloadPreview);
+            inp.addEventListener("keydown", (e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                addArrayRow("");
+                rowsWrap.lastElementChild?.querySelector("input")?.focus();
+              }
+            });
+
+            const rm = document.createElement("button");
+            rm.type = "button";
+            rm.className = "icon-btn";
+            rm.textContent = "×";
+            rm.title = "Remove item";
+            rm.addEventListener("click", () => {
+              row.remove();
+              updatePayloadPreview();
+            });
+
+            row.appendChild(inp);
+            row.appendChild(rm);
+            rowsWrap.appendChild(row);
+            updatePayloadPreview();
+          }
+
+          const seedItems = Array.isArray(initialVal) && initialVal.length > 0 ? initialVal : [""];
+          seedItems.forEach((v) => addArrayRow(String(v)));
+
+          const addBtn = document.createElement("button");
+          addBtn.type = "button";
+          addBtn.className = "small";
+          addBtn.textContent = "+ Add item";
+          addBtn.style.alignSelf = "flex-start";
+          addBtn.addEventListener("click", () => {
+            addArrayRow("");
+            rowsWrap.lastElementChild?.querySelector("input")?.focus();
+          });
+          editor.appendChild(addBtn);
+          group.appendChild(editor);
+        } else if (resolved.baseType === "object") {
+          const ta = document.createElement("textarea");
+          ta.id = `field-${key}`;
+          ta.rows = 3;
+          ta.style.fontFamily = "var(--mono)";
+          ta.placeholder = '{"key": "value"}';
+          if (initialVal !== undefined && initialVal !== null) {
+            ta.value = JSON.stringify(initialVal, null, 2);
+          }
+          ta.addEventListener("input", updatePayloadPreview);
+          group.appendChild(ta);
+        } else {
+          // Default: string
+          const inp = document.createElement("input");
+          inp.type = "text";
+          inp.id = `field-${key}`;
+          inp.placeholder = resolved.nullable
+            ? "null (leave blank to omit)"
+            : !isRequired && hasDefault
+              ? `Optional (default: ${JSON.stringify(propSchema.default)})`
+              : `Enter ${key}`;
+          if (initialVal !== undefined && initialVal !== null) {
+            inp.value = String(initialVal);
+          }
+          inp.addEventListener("input", updatePayloadPreview);
+          group.appendChild(inp);
+        }
+
+        const hints = [];
+        if (propSchema.description) hints.push(propSchema.description);
+        if (hasDefault) hints.push(`Default: ${JSON.stringify(propSchema.default)}`);
+        if (hints.length) {
+          const hintEl = document.createElement("div");
+          hintEl.className = "field-hint";
+          hintEl.textContent = hints.join(" · ");
+          group.appendChild(hintEl);
+        }
+
+        els.formFields.appendChild(group);
+      }
+
+      updatePayloadPreview();
+    }
+
+    function collectFormArguments() {
+      const args = {};
+      const errors = [];
+      const groups = els.formFields.querySelectorAll(".field-group");
+
+      for (const group of groups) {
+        const key = group.dataset.fieldName;
+        const baseType = group.dataset.baseType;
+        const nullable = group.dataset.nullable === "true";
+        const required = group.dataset.required === "true";
+
+        if (baseType === "array") {
+          const editor = group.querySelector(".array-editor");
+          const itemType = editor?.dataset.itemType || "string";
+          const inputs = group.querySelectorAll(".array-row input");
+          const items = [];
+          for (const inp of inputs) {
+            const raw = inp.value.trim();
+            if (!raw) continue;
+            if (itemType === "integer") {
+              const n = parseInt(raw, 10);
+              if (Number.isNaN(n)) errors.push(`'${key}' contains invalid integer '${raw}'.`);
+              else items.push(n);
+            } else if (itemType === "number") {
+              const n = Number(raw);
+              if (Number.isNaN(n)) errors.push(`'${key}' contains invalid number '${raw}'.`);
+              else items.push(n);
+            } else {
+              items.push(raw);
+            }
+          }
+          if (items.length === 0 && required) {
+            errors.push(`'${key}' is required (add at least one item).`);
+          }
+          args[key] = items;
+          continue;
+        }
+
+        const ctrl = group.querySelector(`#field-${CSS.escape(key)}`);
+        if (!ctrl) continue;
+
+        if (ctrl.tagName === "SELECT") {
+          if (ctrl.value === "__NULL__") {
+            if (nullable) args[key] = null;
+          } else if (baseType === "boolean") {
+            args[key] = ctrl.value === "true";
+          } else {
+            args[key] = ctrl.value;
+          }
+        } else if (ctrl.type === "checkbox") {
+          args[key] = ctrl.checked;
+        } else if (baseType === "integer" || baseType === "number") {
+          const raw = ctrl.value.trim();
+          if (raw === "") {
+            if (required && !nullable) {
+              errors.push(`'${key}' is required.`);
+            } else if (nullable) {
+              args[key] = null;
+            }
+          } else {
+            const num = baseType === "integer" ? parseInt(raw, 10) : Number(raw);
+            if (Number.isNaN(num)) {
+              errors.push(`'${key}' must be a valid ${baseType}.`);
+            } else {
+              args[key] = num;
+            }
+          }
+        } else if (baseType === "object") {
+          const raw = ctrl.value.trim();
+          if (!raw) {
+            if (required && !nullable) errors.push(`'${key}' is required.`);
+            else if (nullable) args[key] = null;
+          } else {
+            try {
+              args[key] = JSON.parse(raw);
+            } catch {
+              errors.push(`'${key}' must be valid JSON.`);
+            }
+          }
+        } else {
+          const raw = ctrl.value;
+          if (raw.trim() === "") {
+            if (required && !nullable) {
+              errors.push(`'${key}' is required.`);
+            } else if (nullable) {
+              args[key] = null;
+            }
+          } else {
+            args[key] = raw;
+          }
+        }
+      }
+
+      return { args, errors };
+    }
+
+    function updatePayloadPreview() {
+      if (!state.selectedTool) return;
+      const { args } = collectFormArguments();
+      const previewObj = {
+        tool_call: {
+          name: state.selectedTool.name,
+          arguments: args,
+        },
+      };
+      els.payloadPreview.innerHTML = highlightJson(previewObj);
+    }
+
+    // --- Response rendering ---
+    function renderFigureRow(f) {
+      const hasMedia = Boolean(f.media_path);
+      const altAttr = `data-alt-text="${escapeHtml(f.alt_text || "")}"`;
+      const titleEl = hasMedia
+        ? `<button type="button" class="figure-link" data-media-path="${escapeHtml(f.media_path)}" data-citation="${escapeHtml(f.citation || "Figure")}" data-caption="${escapeHtml(f.caption || "")}" ${altAttr}>${escapeHtml(f.citation || "Figure")}</button>`
+        : `<strong>${escapeHtml(f.citation || "Figure")}</strong>`;
+      const secBadge = f.section_id ? `<span class="badge">Section ${escapeHtml(f.section_id)}</span>` : "";
+      const viewBtn = hasMedia
+        ? `<button type="button" class="small figure-link" style="text-decoration: none; border: 1px solid var(--border-strong); padding: 3px 8px; border-radius: 6px;" data-media-path="${escapeHtml(f.media_path)}" data-citation="${escapeHtml(f.citation || "Figure")}" data-caption="${escapeHtml(f.caption || "")}" ${altAttr}>View Image</button>`
+        : `<span class="badge">no image</span>`;
+      const altHtml = f.alt_text && f.alt_text !== f.caption
+        ? `<div class="field-hint" style="margin-top: 2px;"><strong>Alt text:</strong> ${escapeHtml(f.alt_text)}</div>`
+        : "";
+      return `
+        <div class="figure-row">
+          <div class="figure-row-head">
+            <span style="display: flex; align-items: center; gap: 8px;">${titleEl}${secBadge}</span>
+            ${viewBtn}
+          </div>
+          ${f.caption ? `<div class="field-hint" style="margin-top: 2px;">${escapeHtml(f.caption)}</div>` : ""}
+          ${altHtml}
+        </div>
+      `;
+    }
+
+    function renderReadableView(entry) {
+      if (!entry.ok) {
+        return `
+          <div class="error-banner">
+            <strong>${escapeHtml(entry.error_type || "Error")}:</strong> ${escapeHtml(entry.error || "Tool call failed.")}
+            ${entry.validation_errors ? `<pre style="margin-top: 8px;">${escapeHtml(JSON.stringify(entry.validation_errors, null, 2))}</pre>` : ""}
+          </div>
+        `;
+      }
+
+      const r = entry.result;
+      if (!r || typeof r !== "object") {
+        return `<div class="code-block"><pre>${highlightJson(r)}</pre></div>`;
+      }
+
+      if (r.error) {
+        const matchesHtml = Array.isArray(r.closest_matches) && r.closest_matches.length > 0
+          ? `<div style="margin-top: 8px; font-size: 12.5px;"><strong>Closest valid section IDs:</strong><ul style="margin: 4px 0 0 18px; padding: 0;">${r.closest_matches.map((m) => `<li><code>${escapeHtml(m.section_id)}</code> — ${escapeHtml(m.title)}</li>`).join("")}</ul></div>`
+          : "";
+        return `<div class="error-banner">${escapeHtml(r.error)}${matchesHtml}</div>`;
+      }
+
+      // Specialized readable views for common Chemistry 2e shapes, with graceful fallback
+      if (Array.isArray(r.exercises)) {
+        if (r.exercises.length === 0) {
+          return `<div class="empty-state">No exercises matched.${r.not_found?.length ? `<br>Not found: ${escapeHtml(r.not_found.join(", "))}` : ""}</div>`;
+        }
+        const cards = r.exercises.map((ex) => {
+          let answerHtml = "";
+          if (ex.answer_key !== undefined) {
+            answerHtml = `
+              <div class="answer-box ${ex.has_answer ? "verified" : "unavailable"}">
+                <strong>Official Answer Key:</strong> ${escapeHtml(ex.answer_key)}
+              </div>
+            `;
+          } else if (ex.has_answer) {
+            answerHtml = `
+              <div class="answer-box" style="color: var(--text-muted);">
+                <strong>Official Answer Key:</strong> <em>Hidden by default — call <code>get_exercise_bundle</code> with <code>include_answers: true</code> to reveal.</em>
+              </div>
+            `;
+          } else {
+            answerHtml = `
+              <div class="answer-box unavailable">
+                <strong>Official Answer Key:</strong> unavailable (even-numbered exercise)
+              </div>
+            `;
+          }
+          return `
+            <div class="readable-card">
+              <h4>
+                <span>${escapeHtml(ex.id)} <span style="color: var(--text-muted); font-weight: 400;">(Section ${escapeHtml(ex.section_id)})</span></span>
+                <span class="badge ${ex.has_answer ? "ok" : "req"}">${escapeHtml(ex.answer_status)}</span>
+              </h4>
+              <div class="readable-text">${escapeHtml(ex.problem)}</div>
+              ${answerHtml}
+            </div>
+          `;
+        }).join("");
+        const noteHtml = r.note
+          ? `<div class="field-hint" style="margin-bottom: 10px;">${escapeHtml(r.note)}</div>`
+          : "";
+        const notFound = r.not_found?.length
+          ? `<div class="error-banner" style="margin-top: 8px;">Not found: ${escapeHtml(r.not_found.join(", "))}</div>`
+          : "";
+        return noteHtml + cards + notFound;
+      }
+
+      if (typeof r.content === "string" && r.section_id) {
+        const figHtml = r.figures_in_section?.length
+          ? `<div class="readable-card">
+              <h4>Figures in Section (${r.figures_in_section.length})</h4>
+              <div class="figure-list">
+                ${r.figures_in_section.map((f) => renderFigureRow(f)).join("")}
+              </div>
+            </div>`
+          : "";
+        return `
+          <div class="readable-card">
+            <h4>
+              <span>${escapeHtml(r.citation || r.section_id)} — ${escapeHtml(r.title || "")}</span>
+              <span class="badge">chunks ${escapeHtml(r.chunk_range)} / ${escapeHtml(r.total_chunks)}${r.has_more ? ` (next: ${r.next_chunk_index})` : ""}</span>
+            </h4>
+            ${r.learning_objectives ? `<div class="answer-box" style="margin-bottom: 10px;"><strong>Learning Objectives:</strong><br>${escapeHtml(r.learning_objectives)}</div>` : ""}
+            <div class="readable-text">${escapeHtml(r.content)}</div>
+          </div>
+          ${figHtml}
+        `;
+      }
+
+      if (typeof r.chapter === "number" && Array.isArray(r.sections)) {
+        const secHtml = r.sections.map((s) => `
+          <div class="figure-row">
+            <div class="figure-row-head">
+              <strong>Section ${escapeHtml(s.id)}: ${escapeHtml(s.title)}</strong>
+              <span class="badge">${escapeHtml(s.kind)}</span>
+            </div>
+            ${s.learning_objectives ? `<div class="field-hint" style="margin-top: 2px;">${escapeHtml(s.learning_objectives)}</div>` : ""}
+          </div>
+        `).join("");
+        const figSummary = r.figures_summary;
+        const figBadge = figSummary
+          ? `<span class="badge type">${figSummary.total} figures</span>`
+          : "";
+        const figHintHtml = figSummary?.hint
+          ? `<div class="field-hint" style="margin-top: 8px;">${escapeHtml(figSummary.hint)}</div>`
+          : "";
+        const ex = r.exercises_summary;
+        const exBadge = ex ? `<span class="badge ok">${ex.total} exercises (${ex.with_official_answer_key} keyed)</span>` : "";
+        return `
+          <div class="readable-card">
+            <h4>
+              <span>Chapter ${r.chapter}: ${escapeHtml(r.title)}</span>
+              <span style="display: flex; gap: 6px; align-items: center;">${figBadge}${exBadge}</span>
+            </h4>
+            <div class="figure-list">${secHtml}</div>
+            ${figHintHtml}
+          </div>
+        `;
+      }
+
+      if (Array.isArray(r.results)) {
+        if (r.results.length === 0) {
+          return `<div class="empty-state">No results matched query <code>${escapeHtml(r.query || "")}</code>.</div>`;
+        }
+        return r.results.map((item) => `
+          <div class="readable-card">
+            <h4>
+              <span>${escapeHtml(item.citation || item.title || item.id || "Result")}${item.section_title ? ` — ${escapeHtml(item.section_title)}` : ""}</span>
+              ${item.category ? `<span class="badge type">${escapeHtml(item.category)}</span>` : item.chunk_index !== undefined ? `<span class="badge">chunk ${item.chunk_index}</span>` : ""}
+            </h4>
+            ${item.heading ? `<div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px;">${escapeHtml(item.heading)}</div>` : ""}
+            <div class="readable-text">${escapeHtml(item.snippet || item.content || JSON.stringify(item, null, 2))}</div>
+          </div>
+        `).join("");
+      }
+
+      return `<div class="code-block"><pre>${highlightJson(r)}</pre></div>`;
+    }
+
+    function renderSelectedResponse() {
+      const entry = state.history[state.selectedHistoryIndex];
+      if (!entry) return;
+
+      els.responseMeta.style.display = "flex";
+      els.responseMeta.innerHTML = `
+        <span class="badge ${entry.ok ? "ok" : "err"}">${entry.ok ? "OK" : (entry.error_type || "ERROR")}</span>
+        <span class="badge" style="color: var(--text);">${escapeHtml(entry.tool)}</span>
+        <span class="badge">${entry.latency_ms} ms</span>
+        ${entry.char_count !== undefined ? `<span class="badge">${entry.char_count.toLocaleString()} chars</span>` : ""}
+        ${entry.estimated_tokens !== undefined ? `<span class="badge type">~${entry.estimated_tokens.toLocaleString()} tok</span>` : ""}
+      `;
+
+      if (state.activeTab === "readable") {
+        els.responseView.innerHTML = renderReadableView(entry);
+      } else if (state.activeTab === "json") {
+        const target = entry.ok ? entry.result : entry;
+        els.responseView.innerHTML = `<div class="code-block"><pre>${highlightJson(target)}</pre></div>`;
+      } else {
+        const env = entry.mcp_envelope || entry;
+        els.responseView.innerHTML = `<div class="code-block"><pre>${highlightJson(env)}</pre></div>`;
+      }
+    }
+
+    function renderHistory() {
+      els.historyCount.textContent = `${state.history.length} call${state.history.length === 1 ? "" : "s"}`;
+      if (state.history.length === 0) {
+        els.historyList.innerHTML = `<div class="empty-state" style="padding: 18px;">No tool calls yet.</div>`;
+        return;
+      }
+
+      els.historyList.innerHTML = "";
+      for (let i = state.history.length - 1; i >= 0; i--) {
+        const entry = state.history[i];
+        const row = document.createElement("div");
+        row.className = `history-item${i === state.selectedHistoryIndex ? " selected" : ""}`;
+        row.innerHTML = `
+          <div class="history-main">
+            <div class="history-title">#${i + 1} ${escapeHtml(entry.tool)}</div>
+            <div class="history-args">${escapeHtml(JSON.stringify(entry.arguments || {}))}</div>
+          </div>
+          <div class="history-meta">
+            <span class="badge ${entry.ok ? "ok" : "err"}">${entry.ok ? "OK" : "ERR"}</span>
+            <span class="badge">${entry.latency_ms} ms</span>
+            ${entry.estimated_tokens ? `<span class="badge type">~${entry.estimated_tokens} tok</span>` : ""}
+          </div>
+        `;
+        row.addEventListener("click", () => {
+          state.selectedHistoryIndex = i;
+          renderHistory();
+          renderSelectedResponse();
+        });
+        els.historyList.appendChild(row);
+      }
+    }
+
+    // --- Form submit ---
+    els.form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (!state.selectedTool) return;
+
+      const { args, errors } = collectFormArguments();
+      if (errors.length > 0) {
+        els.formError.style.display = "block";
+        els.formError.textContent = errors.join(" ");
+        return;
+      }
+      els.formError.style.display = "none";
+
+      els.submitBtn.disabled = true;
+      els.submitBtn.textContent = "Calling tool…";
+
+      try {
+        const res = await fetch("/api/call", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: state.selectedTool.name, arguments: args }),
+        });
+        const data = await res.json();
+        state.history.push(data);
+        state.selectedHistoryIndex = state.history.length - 1;
+
+        if (data.estimated_tokens) {
+          // Include approximate tool-call request tokens + response tokens
+          const reqTokens = Math.max(12, Math.ceil(JSON.stringify({ name: data.tool, arguments: data.arguments }).length / 4));
+          state.cumulativeTokens += reqTokens + data.estimated_tokens;
+          updateContextMeter();
+        }
+
+        renderHistory();
+        renderSelectedResponse();
+      } catch (err) {
+        els.formError.style.display = "block";
+        els.formError.textContent = `Network error calling harness API: ${err.message}`;
+      } finally {
+        els.submitBtn.disabled = false;
+        els.submitBtn.textContent = "Submit Tool Call";
+      }
+    });
+
+    // --- UI controls ---
+    els.toolSelect.addEventListener("change", () => {
+      const tool = state.tools.find((t) => t.name === els.toolSelect.value);
+      if (tool) renderToolForm(tool);
+    });
+
+    els.resetFormBtn.addEventListener("click", () => {
+      if (state.selectedTool) renderToolForm(state.selectedTool);
+    });
+
+    els.copyPayloadBtn.addEventListener("click", async () => {
+      if (!state.selectedTool) return;
+      const { args } = collectFormArguments();
+      const text = JSON.stringify({ tool_call: { name: state.selectedTool.name, arguments: args } }, null, 2);
+      try {
+        await navigator.clipboard.writeText(text);
+        const orig = els.copyPayloadBtn.textContent;
+        els.copyPayloadBtn.textContent = "Copied!";
+        setTimeout(() => { els.copyPayloadBtn.textContent = orig; }, 1200);
+      } catch {
+        // Fallback ignored if clipboard blocked
+      }
+    });
+
+    els.contextLimit.addEventListener("change", updateContextMeter);
+    els.clearContextBtn.addEventListener("click", () => {
+      state.cumulativeTokens = 0;
+      state.history = [];
+      state.selectedHistoryIndex = -1;
+      updateContextMeter();
+      renderHistory();
+      els.responseMeta.style.display = "none";
+      els.responseView.innerHTML = `<div class="empty-state">Context cleared. Submit a tool call to start a fresh 8B session.</div>`;
+    });
+
+    document.querySelectorAll(".tab-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        state.activeTab = btn.dataset.tab;
+        renderSelectedResponse();
+      });
+    });
+
+    // --- Boot ---
+    async function init() {
+      try {
+        const res = await fetch("/api/tools");
+        const data = await res.json();
+        els.serverName.textContent = data.server || "chemistry-2e";
+        state.tools = data.tools || [];
+        els.toolCountBadge.textContent = `${state.tools.length} tools`;
+
+        els.toolSelect.innerHTML = "";
+        for (const t of state.tools) {
+          const opt = document.createElement("option");
+          opt.value = t.name;
+          opt.textContent = t.name;
+          els.toolSelect.appendChild(opt);
+        }
+
+        if (state.tools.length > 0) {
+          renderToolForm(state.tools[0]);
+        }
+        updateContextMeter();
+      } catch (err) {
+        els.toolDesc.textContent = `Failed to load tools from /api/tools: ${err.message}`;
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>

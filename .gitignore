@@ -1,0 +1,21 @@
+# Python / uv
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+
+# Raw textbook bundles, PDFs, and generated SQLite databases
+data/raw/
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/snippets/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
