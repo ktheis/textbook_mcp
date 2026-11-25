@@ -42,10 +42,9 @@ Example MCP client configuration:
 
 | Tool | Purpose |
 | --- | --- |
-| `get_toc` | Compact table of contents (chapters, sections, appendices) |
-| `browse_chapter` | Chapter sections, learning objectives, tables, examples, and figure/exercise counts |
+| `browse_chapter` | Chapter sections, learning objectives, and figure/table/example/exercise counts (`chapter=0` returns the book Table of Contents) |
 | `search_textbook` | BM25 full-text search over exposition chunks with canonical section citations |
 | `read_section` | Paginated section reader (~1500-token chunks) with figure references |
-| `search_exercises` | Filter exercises by keyword, chapter, section, and `has_answer` |
-| `get_exercise_bundle` | Fetch exact exercises paired with official odd-numbered answer keys (`unavailable` for even) |
+| `search_exercises` | Paginated search/browse over end-of-chapter exercises by keyword, chapter, section, and answer-key filter |
+| `get_exercise_bundle` | Fetch exact exercises paired with official odd-numbered answer keys (`unavailable` for even; hidden by default) |
 | `lookup_reference_data` | Query OpenStax Appendix reference tables (thermodynamics, equilibrium, constants, periodic table) |

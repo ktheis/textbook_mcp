@@ -676,6 +676,85 @@
       border-radius: 8px;
       padding: 10px 12px;
     }
+
+    /* Markdown readable view */
+    .markdown-view {
+      font-size: 13.5px;
+      line-height: 1.55;
+      color: var(--text-secondary);
+    }
+
+    .markdown-view h1 {
+      margin: 0 0 10px;
+      font-size: 16px;
+      color: var(--accent);
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 6px;
+    }
+
+    .markdown-view h2 {
+      margin: 14px 0 6px;
+      font-size: 14.5px;
+      color: var(--accent);
+    }
+
+    .markdown-view h3 {
+      margin: 12px 0 4px;
+      font-size: 13.5px;
+      color: var(--text);
+    }
+
+    .markdown-view p {
+      margin: 0 0 10px;
+    }
+
+    .markdown-view p:last-child,
+    .markdown-view ul:last-child {
+      margin-bottom: 0;
+    }
+
+    .markdown-view ul {
+      margin: 4px 0 10px;
+      padding-left: 20px;
+    }
+
+    .markdown-view li {
+      margin-bottom: 6px;
+    }
+
+    .markdown-view code {
+      font-family: var(--mono);
+      font-size: 12px;
+      background: var(--surface-inset);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 5px;
+    }
+
+    .md-table-wrap {
+      overflow-x: auto;
+      margin: 8px 0 12px;
+    }
+
+    .markdown-view table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12.5px;
+    }
+
+    .markdown-view th,
+    .markdown-view td {
+      border: 1px solid var(--border);
+      padding: 6px 9px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .markdown-view th {
+      background: var(--panel-alt);
+      color: var(--text);
+      font-weight: 600;
+    }
   </style>
 </head>
 <body>
@@ -761,7 +840,7 @@
           <h2>2. Harness — Tool Response</h2>
           <div class="tabs">
             <button type="button" class="tab-btn active" data-tab="readable">Readable</button>
-            <button type="button" class="tab-btn" data-tab="json">Pretty JSON</button>
+            <button type="button" class="tab-btn" data-tab="json">Raw / JSON</button>
             <button type="button" class="tab-btn" data-tab="mcp">MCP Envelope</button>
           </div>
         </div>
@@ -1357,6 +1436,149 @@
       `;
     }
 
+    function formatInlineMarkdown(raw) {
+      const codeTokens = [];
+      let escaped = escapeHtml(raw);
+      escaped = escaped.replace(/`([^`]+)`/g, (_, inner) => {
+        const idx = codeTokens.length;
+        if (/^media\/[^`\s]+$/i.test(inner)) {
+          codeTokens.push(
+            `<button type="button" class="figure-link" data-media-path="${inner}" data-citation="${inner}" data-caption="">${inner}</button>`
+          );
+        } else {
+          codeTokens.push(`<code>${inner}</code>`);
+        }
+        return `\u0000CODE${idx}\u0000`;
+      });
+      escaped = escaped.replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>");
+      escaped = escaped.replace(/\*([^*\n]+)\*/g, "<em>$1</em>");
+      escaped = escaped.replace(/\u0000CODE(\d+)\u0000/g, (_, idx) => codeTokens[Number(idx)]);
+      return escaped;
+    }
+
+    function parsePipeRow(line) {
+      let trimmed = line.trim();
+      if (trimmed.startsWith("|")) trimmed = trimmed.slice(1);
+      if (trimmed.endsWith("|")) trimmed = trimmed.slice(0, -1);
+      return trimmed.split("|").map((cell) => cell.trim());
+    }
+
+    function renderMarkdownFigureLine(line) {
+      const match = line.match(/^- \*\*([^*]+)\*\*\s+\(`(media\/[^`]+)`\)(?::\s*(.*))?$/);
+      if (!match) return null;
+      const citation = match[1].trim();
+      const mediaPath = match[2].trim();
+      const rest = (match[3] || "").trim();
+      let caption = rest;
+      let altText = "";
+      const altSplit = rest.split(/\s+\|\s+Alt:\s+/);
+      if (altSplit.length === 2) {
+        caption = altSplit[0].trim();
+        altText = altSplit[1].trim();
+      } else if (rest.startsWith("Alt: ")) {
+        caption = "";
+        altText = rest.slice(5).trim();
+      }
+      return renderFigureRow({ citation, media_path: mediaPath, caption, alt_text: altText });
+    }
+
+    function renderMarkdown(md) {
+      const lines = String(md).replace(/\r\n/g, "\n").split("\n");
+      const out = [];
+      let i = 0;
+
+      while (i < lines.length) {
+        const line = lines[i];
+        if (!line.trim()) {
+          i++;
+          continue;
+        }
+
+        // Headings
+        const hMatch = line.match(/^(#{1,3})\s+(.*)$/);
+        if (hMatch) {
+          const level = hMatch[1].length;
+          out.push(`<h${level}>${formatInlineMarkdown(hMatch[2])}</h${level}>`);
+          i++;
+          continue;
+        }
+
+        // GFM pipe tables
+        if (
+          line.includes("|") &&
+          i + 1 < lines.length &&
+          /^\s*\|?[\s:-]+\|[\s|:-]*$/.test(lines[i + 1])
+        ) {
+          const headers = parsePipeRow(line);
+          i += 2;
+          const bodyRows = [];
+          while (i < lines.length && lines[i].includes("|") && lines[i].trim() !== "") {
+            bodyRows.push(parsePipeRow(lines[i]));
+            i++;
+          }
+          const thead = `<thead><tr>${headers.map((h) => `<th>${formatInlineMarkdown(h)}</th>`).join("")}</tr></thead>`;
+          const tbody = `<tbody>${bodyRows
+            .map((row) => `<tr>${row.map((c) => `<td>${formatInlineMarkdown(c)}</td>`).join("")}</tr>`)
+            .join("")}</tbody>`;
+          out.push(`<div class="md-table-wrap"><table>${thead}${tbody}</table></div>`);
+          continue;
+        }
+
+        // Figure bullet list block
+        if (renderMarkdownFigureLine(line) !== null) {
+          const figCards = [];
+          while (i < lines.length) {
+            const figHtml = renderMarkdownFigureLine(lines[i]);
+            if (figHtml === null) break;
+            figCards.push(figHtml);
+            i++;
+          }
+          out.push(`<div class="figure-list">${figCards.join("")}</div>`);
+          continue;
+        }
+
+        // Standard bullet list (with optional indented continuation lines)
+        if (/^- /.test(line)) {
+          const items = [];
+          while (i < lines.length && /^- /.test(lines[i])) {
+            let itemHtml = formatInlineMarkdown(lines[i].slice(2));
+            i++;
+            const subLines = [];
+            while (i < lines.length && /^\s{2,}\S/.test(lines[i])) {
+              subLines.push(formatInlineMarkdown(lines[i].trim()));
+              i++;
+            }
+            if (subLines.length) {
+              itemHtml += `<div class="field-hint" style="margin-top: 2px;">${subLines.join("<br>")}</div>`;
+            }
+            items.push(`<li>${itemHtml}</li>`);
+          }
+          out.push(`<ul>${items.join("")}</ul>`);
+          continue;
+        }
+
+        // Paragraph lines
+        const paraLines = [];
+        while (
+          i < lines.length &&
+          lines[i].trim() !== "" &&
+          !/^(#{1,3})\s+/.test(lines[i]) &&
+          !/^- /.test(lines[i]) &&
+          !(
+            lines[i].includes("|") &&
+            i + 1 < lines.length &&
+            /^\s*\|?[\s:-]+\|[\s|:-]*$/.test(lines[i + 1])
+          )
+        ) {
+          paraLines.push(formatInlineMarkdown(lines[i]));
+          i++;
+        }
+        out.push(`<p>${paraLines.join("<br>")}</p>`);
+      }
+
+      return out.join("\n");
+    }
+
     function renderReadableView(entry) {
       if (!entry.ok) {
         return `
@@ -1368,6 +1590,13 @@
       }
 
       const r = entry.result;
+      if (typeof r === "string") {
+        if (/^Error:/i.test(r.trim())) {
+          return `<div class="error-banner"><div class="markdown-view">${renderMarkdown(r)}</div></div>`;
+        }
+        return `<div class="readable-card"><div class="markdown-view">${renderMarkdown(r)}</div></div>`;
+      }
+
       if (!r || typeof r !== "object") {
         return `<div class="code-block"><pre>${highlightJson(r)}</pre></div>`;
       }
@@ -1514,7 +1743,11 @@
         els.responseView.innerHTML = renderReadableView(entry);
       } else if (state.activeTab === "json") {
         const target = entry.ok ? entry.result : entry;
-        els.responseView.innerHTML = `<div class="code-block"><pre>${highlightJson(target)}</pre></div>`;
+        if (typeof target === "string") {
+          els.responseView.innerHTML = `<div class="code-block"><pre>${escapeHtml(target)}</pre></div>`;
+        } else {
+          els.responseView.innerHTML = `<div class="code-block"><pre>${highlightJson(target)}</pre></div>`;
+        }
       } else {
         const env = entry.mcp_envelope || entry;
         els.responseView.innerHTML = `<div class="code-block"><pre>${highlightJson(env)}</pre></div>`;

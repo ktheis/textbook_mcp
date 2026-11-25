@@ -58,6 +58,20 @@ def _fts_queries(raw: str) -> tuple[str, str]:
     return and_q, or_q
 
 
+_LO_BOILERPLATE_RE = re.compile(
+    r"^\s*By the end of this section, you will be able to:\s*(?:[-•]\s*)?",
+    flags=re.IGNORECASE,
+)
+
+
+def _clean_objectives(raw: str, max_chars: int = 600) -> str:
+    """Strip repeated OpenStax learning-objectives boilerplate and cap length."""
+    cleaned = _LO_BOILERPLATE_RE.sub("", (raw or "").strip()).strip()
+    if len(cleaned) <= max_chars:
+        return cleaned
+    return cleaned[:max_chars].rstrip() + "..."
+
+
 def _cap_text(text: str, max_chars: int = MAX_RESPONSE_CHARS) -> tuple[str, bool]:
     if len(text) <= max_chars:
         return text, False
@@ -94,50 +108,39 @@ def _closest_sections(conn: sqlite3.Connection, bad_id: str, limit: int = 5) -> 
 
 
 @mcp.tool()
-def get_toc() -> dict[str, Any]:
-    """Return the full Table of Contents (all 21 chapters, sections, and appendices). Prefer search_textbook or browse_chapter first; call get_toc only when you do not know which chapter or appendix covers a topic."""
-    with _conn() as conn:
-        chapters = conn.execute(
-            "SELECT number, title, section_count FROM chapters ORDER BY number"
-        ).fetchall()
-        sections = conn.execute(
-            "SELECT id, chapter_num, title, kind FROM sections ORDER BY rowid"
-        ).fetchall()
-
-    chap_map: dict[int, dict[str, Any]] = {
-        c["number"]: {
-            "chapter": c["number"],
-            "title": c["title"],
-            "sections": [],
-        }
-        for c in chapters
-    }
-    appendices: list[dict[str, str]] = []
-
-    for s in sections:
-        if s["kind"] == "appendix":
-            appendices.append({"id": s["id"], "title": s["title"]})
-        elif s["chapter_num"] in chap_map and s["kind"] == "section":
-            chap_map[s["chapter_num"]]["sections"].append({"id": s["id"], "title": s["title"]})
-
-    return {
-        "book": "OpenStax Chemistry 2e",
-        "chapters": list(chap_map.values()),
-        "appendices": appendices,
-    }
-
-
-@mcp.tool()
 def browse_chapter(
-    chapter: Annotated[int, Field(description="Chapter number from 1 to 21 (e.g. 5 for Thermochemistry).")],
-) -> dict[str, Any]:
-    """Inspect a chapter's sections, learning objectives, tables, examples, and figure/exercise counts. Use when you know the chapter number (1-21) and want to pick a section_id; call read_section for figure links and descriptions."""
+    chapter: Annotated[int, Field(description="Chapter number (1-21, e.g. 5 for Thermochemistry), or 0 for the book Table of Contents (all chapters and appendices).")] = 0,
+) -> str:
+    """List a chapter's sections, objectives, and counts of figures, tables, examples, and exercises. Pass chapter=0 for the full book Table of Contents (21 chapters + appendices)."""
     with _conn() as conn:
+        if chapter == 0:
+            chapters = conn.execute(
+                "SELECT number, title, section_count FROM chapters ORDER BY number"
+            ).fetchall()
+            appendices = conn.execute(
+                "SELECT id, title FROM sections WHERE kind = 'appendix' ORDER BY rowid"
+            ).fetchall()
+
+            lines = [
+                "# OpenStax Chemistry 2e — Table of Contents",
+                "Call browse_chapter(chapter=N) for a chapter's sections, or read_section(section_id='app-X') for an appendix.",
+                "",
+                "## Chapters",
+            ]
+            for c in chapters:
+                lines.append(f"- **Ch {c['number']}**: {c['title']} ({c['section_count']} sections)")
+            if appendices:
+                lines.append("")
+                lines.append("## Appendices")
+                for a in appendices:
+                    lines.append(f"- **{a['id']}**: {a['title']}")
+            return "\n".join(lines)
+
         chap = conn.execute(
             "SELECT number, title FROM chapters WHERE number = ?", (chapter,)
         ).fetchone()
         if chap is None:
-            return {"error": f"Chapter {chapter} not found (valid range: 1-21)."}
+            return f"Error: Chapter {chapter} not found (valid range: 0 for TOC, or 1-21)."
 
         sections = conn.execute(
             "SELECT id, title, kind, learning_objectives FROM sections WHERE chapter_num = ? ORDER BY rowid",
@@ -147,61 +150,62 @@ def browse_chapter(
             "SELECT COUNT(*) FROM figures WHERE chapter_num = ?",
             (chapter,),
         ).fetchone()[0]
-        tables = conn.execute(
-            "SELECT label, section_id, title FROM book_tables WHERE chapter_num = ? ORDER BY rowid",
+        table_count = conn.execute(
+            "SELECT COUNT(*) FROM book_tables WHERE chapter_num = ?",
             (chapter,),
-        ).fetchall()
-        examples = conn.execute(
-            "SELECT label, section_id, title FROM examples WHERE chapter_num = ? ORDER BY rowid",
+        ).fetchone()[0]
+        example_count = conn.execute(
+            "SELECT COUNT(*) FROM examples WHERE chapter_num = ?",
             (chapter,),
-        ).fetchall()
+        ).fetchone()[0]
         ex_counts = conn.execute(
             "SELECT COUNT(*) AS total, COALESCE(SUM(has_answer), 0) AS keyed FROM exercises WHERE chapter_num = ?",
             (chapter,),
         ).fetchone()
+        sec_ex_rows = conn.execute(
+            "SELECT section_id, COUNT(*) AS cnt FROM exercises WHERE chapter_num = ? GROUP BY section_id",
+            (chapter,),
+        ).fetchall()
 
-    return {
-        "chapter": chap["number"],
-        "title": chap["title"],
-        "sections": [
-            {
-                "id": s["id"],
-                "title": s["title"],
-                "kind": s["kind"],
-                "learning_objectives": s["learning_objectives"][:600],
-            }
-            for s in sections
-        ],
-        "figures_summary": {
-            "total": fig_count,
-            "hint": "Call read_section(section_id=...) for figure links and descriptions.",
-        },
-        "tables": [
-            {"citation": t["label"], "section_id": t["section_id"], "title": t["title"]}
-            for t in tables
-        ],
-        "examples": [
-            {"citation": e["label"], "section_id": e["section_id"], "title": e["title"]}
-            for e in examples
-        ],
-        "exercises_summary": {
-            "total": ex_counts["total"],
-            "with_official_answer_key": ex_counts["keyed"],
-            "without_answer_key": ex_counts["total"] - ex_counts["keyed"],
-        },
-    }
+    sec_ex_map = {r["section_id"]: r["cnt"] for r in sec_ex_rows}
+    total_ex = ex_counts["total"]
+    keyed_ex = ex_counts["keyed"]
+    unkeyed_ex = total_ex - keyed_ex
+
+    lines = [
+        f"# Chapter {chap['number']}: {chap['title']}",
+        "",
+        (
+            f"Figures: {fig_count} (call read_section for links/descriptions)"
+            f" | Tables: {table_count}"
+            f" | Examples: {example_count}"
+            f" | Exercises: {total_ex} ({keyed_ex} with official key, {unkeyed_ex} unkeyed)"
+        ),
+        "",
+        "## Sections",
+    ]
+    for s in sections:
+        kind_tag = f" [{s['kind']}]" if s["kind"] != "section" else ""
+        ex_n = sec_ex_map.get(s["id"], 0)
+        ex_tag = f" ({ex_n} exercises)" if ex_n else ""
+        lines.append(f"- **{s['id']}: {s['title']}**{kind_tag}{ex_tag}")
+        obj = _clean_objectives(s["learning_objectives"], max_chars=600)
+        if obj:
+            lines.append(f"  Objectives: {obj}")
+
+    return "\n".join(lines)
 
 
 @mcp.tool()
 def search_textbook(
-    query: Annotated[str, Field(description="2-5 chemistry keywords (not a full sentence), e.g. 'Hess law enthalpy' or 'hydrogen bonding density'.")],
-    chapter: Annotated[int, Field(description="Optional chapter filter (1-21). Omit or pass 0 to search all chapters.")] = 0,
-    limit: Annotated[int, Field(description="Maximum results to return (1-12, default 5).")] = 5,
-) -> dict[str, Any]:
-    """Use for conceptual questions, definitions, formulas, and worked examples in Chemistry 2e. Pass 2-5 chemistry keywords (not full sentences). Returns snippets with section_id and chunk_index to pass to read_section."""
+    query: Annotated[str, Field(description="2-5 chemistry keywords (not a full sentence), e.g. 'Hess law enthalpy'.")],
+    chapter: Annotated[int, Field(description="Chapter filter (1-21); 0 searches all.")] = 0,
+    limit: Annotated[int, Field(description="Max results (1-12, default 5).")] = 5,
+) -> str:
+    """Search Chemistry 2e for concepts, definitions, formulas, and worked examples using 2-5 keywords. Returns snippets with section_id and chunk_index for read_section."""
     and_q, or_q = _fts_queries(query)
     if not and_q:
-        return {"query": query, "results": [], "note": "Empty or non-alphanumeric query."}
+        return f'No results for "{query}": empty or non-alphanumeric query.'
 
     limit = max(1, min(limit, 12))
     chapter_filter = chapter if chapter and chapter > 0 else None
@@ -237,12 +241,17 @@ def search_textbook(
         rows = _run_search(or_q)
         match_mode = "or_fallback"
 
-    results = []
+    chap_note = f", chapter={chapter_filter}" if chapter_filter is not None else ""
+    parts = [f'Search "{query}" ({len(rows)} results, mode={match_mode}{chap_note})']
+
+    if not rows:
+        parts.append("No matching textbook passages found.")
+        return "\n\n".join(parts)
+
     for r in rows:
         full_content = r["content"]
         if len(full_content) <= 750:
             snippet = full_content
-            truncated = False
         else:
             raw_snippet = (r["fts_snippet"] or full_content).strip()
             if len(raw_snippet) > 750:
@@ -254,32 +263,21 @@ def search_textbook(
                 if truncated
                 else raw_snippet
             )
-        results.append({
-            "citation": f"Section {r['section_id']}" if not r["section_id"].startswith("app-") else r["section_id"],
-            "section_id": r["section_id"],
-            "section_title": r["section_title"],
-            "heading": r["heading"],
-            "chunk_index": r["chunk_index"],
-            "truncated": truncated,
-            "snippet": snippet,
-        })
+        citation = f"Section {r['section_id']}" if not r["section_id"].startswith("app-") else r["section_id"]
+        header = f"## {citation} — {r['section_title']} (section_id={r['section_id']}, chunk={r['chunk_index']})"
+        heading_line = f"*{r['heading']}*\n" if r["heading"] and r["heading"] != r["section_title"] else ""
+        parts.append(f"{header}\n{heading_line}{snippet}")
 
-    return {
-        "query": query,
-        "chapter_filter": chapter_filter,
-        "match_mode": match_mode,
-        "count": len(results),
-        "results": results,
-    }
+    return "\n\n".join(parts)
 
 
 @mcp.tool()
 def read_section(
-    section_id: Annotated[str, Field(description="Canonical section or appendix ID, e.g. '5.3', '6.5', or 'app-G'.")],
-    chunk_index: Annotated[int, Field(description="0-based starting chunk index for pagination (default 0). Use next_chunk_index from the previous call to continue.")] = 0,
-    max_chunks: Annotated[int, Field(description="Number of chunks to return per call (1-4, default 2).")] = 2,
-) -> dict[str, Any]:
-    """Read full textbook exposition for a specific section_id (including worked examples and tables) with pagination. Use after search_textbook or browse_chapter to read complete explanations."""
+    section_id: Annotated[str, Field(description="Canonical section/appendix ID, e.g. '5.3', '6.5', or 'app-G'.")],
+    chunk_index: Annotated[int, Field(description="0-based starting chunk (default 0). Use next_chunk_index to continue.")] = 0,
+    max_chunks: Annotated[int, Field(description="Chunks to return (1-4, default 2).")] = 2,
+) -> str:
+    """Read full exposition, worked examples, and tables for a section_id with pagination. Use after search_textbook or browse_chapter."""
     chunk_index = max(0, chunk_index)
     max_chunks = max(1, min(max_chunks, 4))
 
@@ -290,10 +288,14 @@ def read_section(
         ).fetchone()
         if sec is None:
             closest = _closest_sections(conn, section_id)
-            return {
-                "error": f"Section '{section_id}' not found. Expected a canonical ID like '5.3' or 'app-G'.",
-                "closest_matches": closest,
-            }
+            lines = [
+                f"Error: Section '{section_id}' not found. Expected a canonical ID like '5.3' or 'app-G'.",
+            ]
+            if closest:
+                lines.append("Closest valid section_id matches:")
+                for m in closest:
+                    lines.append(f"- `{m['section_id']}`: {m['title']}")
+            return "\n".join(lines)
 
         chunks = conn.execute(
             "SELECT chunk_index, heading, content FROM chunks WHERE section_id = ? ORDER BY chunk_index",
@@ -321,52 +323,72 @@ def read_section(
 
     next_idx = chunk_index + included
     has_more = next_idx < total_chunks
+    citation = f"Section {sec['id']}" if sec["kind"] in {"section", "intro"} else sec["id"]
 
-    return {
-        "citation": f"Section {sec['id']}" if sec["kind"] in {"section", "intro"} else sec["id"],
-        "section_id": sec["id"],
-        "title": sec["title"],
-        "learning_objectives": sec["learning_objectives"] if chunk_index == 0 else "",
-        "chunk_range": f"{chunk_index}-{max(chunk_index, next_idx - 1)}" if total_chunks else "empty",
-        "total_chunks": total_chunks,
-        "has_more": has_more,
-        "next_chunk_index": next_idx if has_more else None,
-        "content": "\n\n".join(body_parts),
-        "figures_in_section": [
-            {
-                "citation": f["label"],
-                "caption": f["caption"][:160],
-                "alt_text": f["alt_text"][:240],
-                "media_path": f["media_path"],
-            }
-            for f in figs
-        ] if chunk_index == 0 else [],
-    }
+    if total_chunks:
+        chunk_range = f"{chunk_index}-{max(chunk_index, next_idx - 1)}"
+        next_hint = (
+            f" | Next: read_section(section_id='{sec['id']}', chunk_index={next_idx})"
+            if has_more
+            else " (end of section)"
+        )
+        meta_line = f"Chunks {chunk_range} of {total_chunks}{next_hint}"
+    else:
+        meta_line = "Chunks empty (0 total)"
+
+    parts = [f"# {citation}: {sec['title']}", meta_line]
+
+    if chunk_index == 0 and sec["learning_objectives"]:
+        obj = _clean_objectives(sec["learning_objectives"], max_chars=800)
+        if obj:
+            parts.append(f"**Objectives:** {obj}")
+
+    if body_parts:
+        parts.append("\n\n".join(body_parts))
+
+    if chunk_index == 0 and figs:
+        fig_lines = ["## Figures"]
+        for f in figs:
+            label = f["label"] or "Figure"
+            media = f" (`{f['media_path']}`)" if f["media_path"] else ""
+            cap = (f["caption"] or "").strip()[:160]
+            alt = (f["alt_text"] or "").strip()[:240]
+            desc_parts = []
+            if cap:
+                desc_parts.append(cap)
+            if alt and alt != cap:
+                desc_parts.append(f"Alt: {alt}")
+            desc = " | ".join(desc_parts)
+            fig_lines.append(f"- **{label}**{media}: {desc}" if desc else f"- **{label}**{media}")
+        parts.append("\n".join(fig_lines))
+
+    return "\n\n".join(parts)
 
 
 @mcp.tool()
 def search_exercises(
-    query: Annotated[str, Field(description="2-5 chemistry keywords to match in problem text (e.g. 'calorimetry enthalpy'). Leave empty to browse by chapter or section.")] = "",
-    chapter: Annotated[int, Field(description="Optional chapter filter (1-21). Omit or pass 0 for all chapters.")] = 0,
-    section_id: Annotated[str, Field(description="Optional section ID filter, e.g. '5.3'. Leave empty for all sections.")] = "",
+    query: Annotated[str, Field(description="2-5 keywords in problem text (e.g. 'calorimetry enthalpy'); empty to browse by chapter/section.")] = "",
+    chapter: Annotated[int, Field(description="Chapter filter (1-21); 0 for all.")] = 0,
+    section_id: Annotated[str, Field(description="Section ID filter (e.g. '5.3'); empty for all.")] = "",
     answer_filter: Annotated[
         Literal["any", "with_answer", "without_answer"],
-        Field(description="Filter by official answer-key availability: 'any' (default), 'with_answer' (odd-numbered keyed exercises), or 'without_answer' (unkeyed exercises)."),
+        Field(description="Answer-key filter: 'any' (default), 'with_answer' (odd keyed), or 'without_answer' (unkeyed)."),
     ] = "any",
-    limit: Annotated[int, Field(description="Maximum exercises to return (1-15, default 8).")] = 8,
-) -> dict[str, Any]:
-    """Search end-of-chapter practice problems by keywords, chapter, section_id, or answer-key availability. Returns problem statements only (no answer keys) so you can assign problems without spoiling answers."""
+    limit: Annotated[int, Field(description="Max exercises per call (1-15, default 8).")] = 8,
+    offset: Annotated[int, Field(description="0-based starting offset for pagination (default 0).")] = 0,
+) -> str:
+    """Search or browse end-of-chapter exercises by keywords, chapter, section_id, or answer-key availability, with offset pagination. Returns problems only (no answer keys)."""
     limit = max(1, min(limit, 15))
+    offset = max(0, offset)
     query_clean = query.strip()
     section_clean = section_id.strip()
     chapter_filter = chapter if chapter and chapter > 0 else None
     and_q, or_q = _fts_queries(query_clean) if query_clean else ("", "")
 
-    def _run_ex_query(fts_q: str) -> list[sqlite3.Row]:
+    def _run_ex_query(fts_q: str) -> tuple[list[sqlite3.Row], int]:
         params: list[Any] = []
         if fts_q:
-            sql = """
-                SELECT e.id, e.chapter_num, e.exercise_num, e.section_id, e.problem_text, e.has_answer
+            from_where = """
                 FROM exercises_fts f
                 JOIN exercises e ON e.rowid = f.rowid
                 WHERE exercises_fts MATCH ?
@@ -374,59 +396,81 @@ def search_exercises(
             params.append(fts_q)
             order = "ORDER BY bm25(exercises_fts)"
         else:
-            sql = "SELECT e.id, e.chapter_num, e.exercise_num, e.section_id, e.problem_text, e.has_answer FROM exercises e WHERE 1=1"
+            from_where = "FROM exercises e WHERE 1=1"
             order = "ORDER BY e.chapter_num, e.exercise_num"
 
         if chapter_filter is not None:
-            sql += " AND e.chapter_num = ?"
+            from_where += " AND e.chapter_num = ?"
             params.append(chapter_filter)
         if section_clean:
-            sql += " AND e.section_id = ?"
+            from_where += " AND e.section_id = ?"
             params.append(section_clean)
         if answer_filter == "with_answer":
-            sql += " AND e.has_answer = 1"
+            from_where += " AND e.has_answer = 1"
         elif answer_filter == "without_answer":
-            sql += " AND e.has_answer = 0"
+            from_where += " AND e.has_answer = 0"
 
-        sql += f" {order} LIMIT ?"
-        params.append(limit)
+        count_sql = f"SELECT COUNT(*) {from_where}"
+        select_sql = (
+            f"SELECT e.id, e.chapter_num, e.exercise_num, e.section_id, e.problem_text, e.has_answer "
+            f"{from_where} {order} LIMIT ? OFFSET ?"
+        )
         with _conn() as conn:
-            return conn.execute(sql, params).fetchall()
+            total = conn.execute(count_sql, params).fetchone()[0]
+            rows = conn.execute(select_sql, [*params, limit, offset]).fetchall()
+            return rows, total
 
     match_mode = "filter" if not and_q else "and"
-    rows = _run_ex_query(and_q)
-    if and_q and not rows and or_q != and_q:
-        rows = _run_ex_query(or_q)
+    rows, total_matching = _run_ex_query(and_q)
+    if and_q and total_matching == 0 and or_q != and_q:
+        rows, total_matching = _run_ex_query(or_q)
         match_mode = "or_fallback"
 
-    items = []
+    next_offset = offset + len(rows)
+    if rows:
+        span = f"showing {offset + 1}-{next_offset} of {total_matching}"
+    else:
+        span = f"0 shown of {total_matching} matching"
+
+    next_hint = ""
+    if next_offset < total_matching:
+        hint_args = []
+        if query_clean:
+            hint_args.append(f"query={query_clean!r}")
+        if chapter_filter is not None:
+            hint_args.append(f"chapter={chapter_filter}")
+        if section_clean:
+            hint_args.append(f"section_id={section_clean!r}")
+        if answer_filter != "any":
+            hint_args.append(f"answer_filter={answer_filter!r}")
+        hint_args.append(f"offset={next_offset}")
+        next_hint = f" | Next: search_exercises({', '.join(hint_args)})"
+
+    parts = [
+        f"Exercises ({span}, mode={match_mode}, answer_filter={answer_filter}{next_hint})\n"
+        "Note: Answer keys omitted; call get_exercise_bundle(exercise_ids=[...], include_answers=true) after the student attempts a problem."
+    ]
+
+    if not rows:
+        parts.append("No matching exercises found.")
+        return "\n\n".join(parts)
+
     for r in rows:
         prob, _ = _cap_text(r["problem_text"], 600)
-        items.append({
-            "id": r["id"],
-            "section_id": r["section_id"],
-            "has_answer": bool(r["has_answer"]),
-            "answer_status": "verified_official_key" if r["has_answer"] else "unavailable",
-            "problem": prob,
-        })
+        status = "verified_official_key" if r["has_answer"] else "unavailable"
+        parts.append(f"### {r['id']} (Section {r['section_id']} | key: {status})\n{prob}")
 
-    return {
-        "match_mode": match_mode,
-        "answer_filter": answer_filter,
-        "count": len(items),
-        "exercises": items,
-        "note": "Answer keys are omitted from search results. Call get_exercise_bundle(exercise_ids=[...], include_answers=true) only after the student attempts a problem.",
-    }
+    return "\n\n".join(parts)
 
 
 @mcp.tool()
 def get_exercise_bundle(
-    exercise_ids: Annotated[list[str], Field(description="List of exercise IDs, e.g. ['Exercise 1.1', 'Exercise 1.2'] or ['1.1', '1.2'] (max 15).")],
-    include_answers: Annotated[bool, Field(description="Include official answer keys when available (default false). Set true only after the student attempts the problem and you need to verify or explain it.")] = False,
-) -> dict[str, Any]:
-    """Retrieve full problem statements for specific exercise IDs. Official answer keys are hidden by default to avoid spoiling answers during tutoring; set include_answers=true only after the student attempts the problem."""
+    exercise_ids: Annotated[list[str], Field(description="Exercise IDs, e.g. ['Exercise 1.1', '1.2'] (max 15).")],
+    include_answers: Annotated[bool, Field(description="Include official answer keys (default false). Set true only after the student attempts the problem.")] = False,
+) -> str:
+    """Fetch full problem statements for exercise IDs. Answer keys are hidden by default; set include_answers=true only after the student attempts the problem."""
     if not exercise_ids:
-        return {"include_answers": include_answers, "exercises": [], "not_found": []}
+        return f"Exercise Bundle (0 found, include_answers={include_answers})\n\nNo exercise IDs provided."
 
     # Normalize inputs like "1.1" -> "Exercise 1.1"
     normalized = [
@@ -442,25 +486,26 @@ def get_exercise_bundle(
         ).fetchall()
 
     by_id = {r["id"]: r for r in rows}
-    found = []
-    not_found = []
+    found_blocks: list[str] = []
+    not_found: list[str] = []
     for eid in normalized:
         r = by_id.get(eid)
         if r is None:
             not_found.append(eid)
             continue
-        item: dict[str, Any] = {
-            "id": r["id"],
-            "section_id": r["section_id"],
-            "has_answer": bool(r["has_answer"]),
-            "answer_status": "verified_official_key" if r["has_answer"] else "unavailable",
-            "problem": r["problem_text"],
-        }
+        status = "verified_official_key" if r["has_answer"] else "unavailable"
+        block = f"### {r['id']} (Section {r['section_id']} | key: {status})\n{r['problem_text']}"
         if include_answers:
-            item["answer_key"] = r["answer_text"] if r["has_answer"] else "unavailable"
-        found.append(item)
+            ans = r["answer_text"] if r["has_answer"] else "unavailable"
+            block += f"\n\n**Official Answer Key:** {ans}"
+        found_blocks.append(block)
 
-    return {"include_answers": include_answers, "exercises": found, "not_found": not_found}
+    parts = [f"Exercise Bundle ({len(found_blocks)} found, include_answers={include_answers})"]
+    parts.extend(found_blocks)
+    if not_found:
+        parts.append(f"Not found: {', '.join(not_found)}")
+
+    return "\n\n".join(parts)
 
 
 _SUB_TO_ASCII = str.maketrans("₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾", "0123456789+-=()0123456789+-=()")
@@ -613,14 +658,14 @@ def _parse_reference_query(query: str, explicit_cat: str) -> tuple[str, str | No
 
 @mcp.tool()
 def lookup_reference_data(
-    query: Annotated[str, Field(description="Chemical formula, substance name, or constant name (e.g. 'NH3', 'entropy water', 'acetic acid', 'gas constant').")],
+    query: Annotated[str, Field(description="Formula, substance, or constant (e.g. 'NH3', 'entropy water', 'gas constant').")],
     category: Annotated[
         Literal["all", "thermodynamics", "equilibrium", "constants", "periodic_table", "general"],
         Field(description="Appendix category filter (default 'all')."),
     ] = "all",
-    limit: Annotated[int, Field(description="Maximum matching reference tables to return (1-5, default 3).")] = 3,
-) -> dict[str, Any]:
-    """Look up exact numeric data from OpenStax Chemistry 2e Appendices (standard enthalpies/entropies/free energies, Ka/Kb/Ksp, physical constants, periodic table). Use instead of guessing numerical values."""
+    limit: Annotated[int, Field(description="Max tables to return (1-5, default 3).")] = 3,
+) -> str:
+    """Look up exact numeric data from Chemistry 2e Appendices (ΔH°f/S°/ΔG°f, Ka/Kb/Ksp, E°, constants, periodic table). Use instead of guessing values."""
     limit = max(1, min(limit, 5))
     cat_filter = "" if category == "all" else category
     inferred_cat, inferred_app, substance_terms, all_terms = _parse_reference_query(query, cat_filter)
@@ -671,9 +716,14 @@ def lookup_reference_data(
             scored.sort(key=lambda pair: pair[0], reverse=True)
             rows = [r for _, r in scored[:limit]]
 
+    resolved_cat = category if category != "all" else (inferred_cat or "all")
+    parts = [f'Reference Data for "{query}" (category={resolved_cat}, {len(rows)} tables)']
+    if not rows:
+        parts.append("No matching reference tables found.")
+        return "\n\n".join(parts)
+
     # Filter long tables down to matching lines + header so 8B context stays clean
     row_terms = substance_terms if substance_terms else all_terms
-    results = []
     for r in rows:
         content = r["content"]
         if len(content) > 2500 and row_terms:
@@ -692,22 +742,10 @@ def lookup_reference_data(
             chosen = exact_lines if exact_lines else any_lines
             if chosen:
                 content = "\n".join(header + chosen[:40])
-        capped, truncated = _cap_text(content, 2500)
-        results.append({
-            "id": r["id"],
-            "appendix_id": r["appendix_id"],
-            "title": r["title"],
-            "category": r["category"],
-            "truncated": truncated,
-            "content": capped,
-        })
+        capped, _ = _cap_text(content, 2500)
+        parts.append(f"## {r['title']} ({r['appendix_id']}, {r['category']})\n{capped}")
 
-    return {
-        "query": query,
-        "category": category if category != "all" else (inferred_cat or "all"),
-        "count": len(results),
-        "results": results,
-    }
+    return "\n\n".join(parts)
 
 
 def _strip_titles(node: Any) -> None:

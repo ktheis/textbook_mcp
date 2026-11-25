@@ -18,7 +18,6 @@ class TestHarnessLogic(unittest.TestCase):
         self.assertEqual(
             names,
             {
-                "get_toc",
                 "browse_chapter",
                 "search_textbook",
                 "read_section",
@@ -45,17 +44,22 @@ class TestHarnessLogic(unittest.TestCase):
         res = invoke_tool("get_exercise_bundle", {"exercise_ids": ["1.1", "1.2"]})
         self.assertTrue(res["ok"])
         self.assertEqual(res["tool"], "get_exercise_bundle")
-        self.assertEqual(len(res["result"]["exercises"]), 2)
-        self.assertNotIn("answer_key", res["result"]["exercises"][0])
+        self.assertIsInstance(res["result"], str)
+        self.assertIn("Exercise 1.1", res["result"])
+        self.assertIn("Exercise 1.2", res["result"])
+        self.assertNotIn("Official Answer Key:", res["result"])
+        self.assertEqual(res["char_count"], len(res["result"]))
         self.assertGreater(res["estimated_tokens"], 0)
         self.assertEqual(res["mcp_envelope"]["method"], "tools/call")
+        self.assertEqual(res["mcp_envelope"]["response"]["content"][0]["text"], res["result"])
 
         res_ans = invoke_tool(
             "get_exercise_bundle",
             {"exercise_ids": ["1.1"], "include_answers": True},
         )
         self.assertTrue(res_ans["ok"])
-        self.assertIn("answer_key", res_ans["result"]["exercises"][0])
+        self.assertIsInstance(res_ans["result"], str)
+        self.assertIn("Official Answer Key:", res_ans["result"])
 
     def test_invoke_tool_enum_validation_error(self) -> None:
         res = invoke_tool("lookup_reference_data", {"query": "NH3", "category": "chemistry constants"})
@@ -97,7 +101,7 @@ class TestHarnessHTTP(unittest.TestCase):
             data = json.loads(resp.read().decode("utf-8"))
             self.assertEqual(resp.status, 200)
             self.assertEqual(data["server"], "chemistry-2e")
-            self.assertEqual(len(data["tools"]), 7)
+            self.assertEqual(len(data["tools"]), 6)
 
         req = urllib.request.Request(
             f"{base}/api/call",
@@ -109,7 +113,8 @@ class TestHarnessHTTP(unittest.TestCase):
             payload = json.loads(resp.read().decode("utf-8"))
             self.assertEqual(resp.status, 200)
             self.assertTrue(payload["ok"])
-            self.assertEqual(payload["result"]["chapter"], 5)
+            self.assertIsInstance(payload["result"], str)
+            self.assertIn("# Chapter 5:", payload["result"])
 
         with urllib.request.urlopen(f"{base}/media/CNX_Chem_01_00_DailyChem.jpg") as resp:
             img_bytes = resp.read()

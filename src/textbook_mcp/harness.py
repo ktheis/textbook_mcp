@@ -75,7 +75,7 @@ def invoke_tool(name: str, arguments: dict[str, Any] | None = None) -> dict[str,
     try:
         result = tool.fn(**kwargs)
         elapsed_ms = round((time.perf_counter() - t0) * 1000.0, 2)
-        serialized = json.dumps(result, ensure_ascii=False)
+        serialized = result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
         char_count = len(serialized)
         est_tokens = max(1, math.ceil(char_count / 4))
         return {
