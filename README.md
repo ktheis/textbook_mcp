@@ -1,3 +1,5 @@
+This project was written by prompting Gemini 4 (Hydrogen or Neon) in Antigravity in November 2026. I have not read the code.
+
 # Textbook MCP Server (OpenStax Chemistry 2e)
 
 A deterministic, local Model Context Protocol (`stdio`) server and SQLite + FTS5 knowledge base designed to ground small local LLMs (e.g., 8B models) in an open textbook—returning compact, citation-preserving Markdown responses to minimize prompt tokens and CPU prefill time.
